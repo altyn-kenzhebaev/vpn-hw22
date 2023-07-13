@@ -1,0 +1,95 @@
+---
+  # Отключаем SElinux
+  - name: Put SELinux in permissive mode, logging actions that would be blocked.
+    ansible.posix.selinux:
+      policy: targeted
+      state: permissive
+
+  # Устанавливаем EPEL
+  - name: Install EPEL
+    yum:
+      name:
+      - epel-release
+      state: present
+  #    update_cache: true
+  
+  # Обновляем пакеты и устанавливаем пакеты
+  - name: install packages
+    yum:
+      name: 
+        - openvpn
+        - iperf3
+      state: present
+
+  # Копируем сертифкаты на клиент
+  - name: Copy the ca.crt from server to client
+    copy: 
+      src: /tmp/ca.crt
+      dest: /etc/openvpn/
+      owner: root
+      group: root
+      mode: 0600
+
+  # Копируем сертифкаты на клиент
+  - name: Copy the client.crt from server to client
+    copy: 
+      src: /tmp/client.crt
+      dest: /etc/openvpn/
+      owner: root
+      group: root
+      mode: 0600
+
+  # Копируем сертифкаты на клиент
+  - name: Copy the client.key from server to client
+    copy: 
+      src: /tmp/client.key
+      dest: /etc/openvpn/
+      owner: root
+      group: root
+      mode: 0600
+
+  # Копируем файл client1.conf на openvpn-client, указываем владельца и права
+  - name: base set up TAP OpenVPN client 
+    template:
+      src: client3.conf
+      dest: /etc/openvpn/client3.conf
+      owner: root
+      group: root
+      mode: 0640
+
+  # Создадим service unit для запуска openvpn
+  - name: create service unit 
+    template:
+      src: openvpn.service
+      dest: /etc/systemd/system/openvpn@.service
+      owner: root
+      group: root
+      mode: 0640
+
+  # Перезапускам и добавляем в автозагрузку
+  - name: restart openvpn@server3
+    service:
+      name: openvpn@server3
+      state: restarted
+      enabled: true
+      daemon_reload: yes
+    delegate_to: server
+
+  # Перезапускам и добавляем в автозагрузку
+  - name: restart openvpn@client3
+    service:
+      name: openvpn@client3
+      state: restarted
+      enabled: true
+      daemon_reload: yes
+
+  # Проверка доступности
+  - name: Test reachability to 10.20.30.1 using openvpn-client
+    shell: ping -c 4 10.20.30.1
+
+  # Останавливаем для проверки других vpn-туннелей
+  - name: stop openvpn@client3
+    service:
+      name: openvpn@client3
+      state: stopped
+...

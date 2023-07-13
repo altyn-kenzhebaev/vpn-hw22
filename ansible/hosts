@@ -1,0 +1,10 @@
+servers:
+  hosts:
+    server: 
+      ansible_host: 127.0.0.1
+      ansible_port: 2222
+      ansible_private_key_file: /home/altynbek/Otus-homeworks/vpn-hw22/.vagrant/machines/server/virtualbox/private_key
+    client:
+      ansible_host: 127.0.0.1
+      ansible_port: 2200
+      ansible_private_key_file: /home/altynbek/Otus-homeworks/vpn-hw22/.vagrant/machines/client/virtualbox/private_key

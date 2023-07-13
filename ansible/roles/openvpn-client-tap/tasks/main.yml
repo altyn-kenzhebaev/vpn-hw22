@@ -1,0 +1,74 @@
+---
+  # Отключаем SElinux
+  - name: Put SELinux in permissive mode, logging actions that would be blocked.
+    ansible.posix.selinux:
+      policy: targeted
+      state: permissive
+
+  # Устанавливаем EPEL
+  - name: Install EPEL
+    yum:
+      name:
+      - epel-release
+      state: present
+      update_cache: true
+  
+  # Обновляем пакеты и устанавливаем пакеты
+  - name: install packages
+    yum:
+      name: 
+        - openvpn
+        - iperf3
+      state: present
+
+  # Копируем файл-ключ на клиент
+  - name: Copy the Static KEY from server to client
+    copy: 
+      src: /tmp/static.key
+      dest: /etc/openvpn/static.key
+
+  # Копируем файл client1.conf на openvpn-client, указываем владельца и права
+  - name: base set up TAP OpenVPN client 
+    template:
+      src: client1.conf
+      dest: /etc/openvpn/client1.conf
+      owner: root
+      group: root
+      mode: 0640
+
+  # Создадим service unit для запуска openvpn
+  - name: create service unit 
+    template:
+      src: openvpn.service
+      dest: /etc/systemd/system/openvpn@.service
+      owner: root
+      group: root
+      mode: 0640
+
+  # Перезапускам и добавляем в автозагрузку
+  - name: restart openvpn@client1
+    service:
+      name: openvpn@client1
+      state: restarted
+      enabled: true
+      daemon_reload: yes
+
+  # Перезапускам и добавляем в автозагрузку
+  - name: restart openvpn@server1
+    service:
+      name: openvpn@server1
+      state: restarted
+      enabled: true
+      daemon_reload: yes
+    delegate_to: server
+
+  # Проверка доступности
+  - name: Test reachability to 10.10.10.1 using openvpn-client
+    shell: ping -c 4 10.10.10.1
+
+  # Останавливаем для проверки других vpn-туннелей
+  - name: stop openvpn@client1
+    service:
+      name: openvpn@client1
+      state: stopped
+...

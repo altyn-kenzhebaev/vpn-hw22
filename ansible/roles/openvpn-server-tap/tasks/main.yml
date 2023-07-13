@@ -1,0 +1,116 @@
+---
+  # Отключаем SElinux
+  - name: Put SELinux in permissive mode, logging actions that would be blocked.
+    ansible.posix.selinux:
+      policy: targeted
+      state: permissive
+
+  # Запускам и добавляем firewall
+  - name: start firewalld
+    service:
+      name: firewalld
+      state: started
+      enabled: true
+
+ # Добавляем интерфейсы в зону
+  - name: add eth0 to public
+    ansible.posix.firewalld:
+      zone: public
+      interface: eth0
+      permanent: true
+      state: enabled
+    tags:
+      - firewall_conf
+
+ # Добавляем интерфейсы в зону
+  - name: add eth1 to public
+    ansible.posix.firewalld:
+      zone: public
+      interface: eth1
+      permanent: true
+      state: enabled
+    tags:
+      - firewall_conf
+
+ # Добавляем интерфейсы в зону
+  - name: add tap0 to public
+    ansible.posix.firewalld:
+      zone: public
+      interface: tap0
+      permanent: true
+      state: enabled
+    tags:
+      - firewall_conf
+
+  # Добавляем порт
+  - ansible.posix.firewalld:
+      port: 1209/udp
+      permanent: true
+      state: enabled
+
+  # Устанавливаем EPEL
+  - name: Install EPEL
+    yum:
+      name:
+      - epel-release
+      state: present
+      update_cache: true
+  
+  # Обновляем пакеты и устанавливаем пакеты
+  - name: install packages
+    yum:
+      name: 
+        - openvpn
+        - iperf3
+      state: present
+
+  # Создаём файл-ключ
+  - name: Create Static KEY
+    ansible.builtin.shell: openvpn --genkey --secret /etc/openvpn/static.key
+
+  # Копируем статический ключ
+  - name: Fetch the static.key
+    run_once: yes
+    fetch: src=/etc/openvpn/static.key dest=/tmp/ flat=yes
+
+  # Включаем маршрутизацию транзитных пакетов
+  - name: set up forward packages
+    sysctl:
+      name: net.ipv4.conf.all.forwarding
+      value: '1'
+      state: present
+
+  # Копируем файл server1.conf на openvpn-server, указываем владельца и права
+  - name: base set up TAP OpenVPN server 
+    template:
+      src: server1.conf
+      dest: /etc/openvpn/server1.conf
+      owner: root
+      group: root
+      mode: 0640
+
+  # Создадим service unit для запуска openvpn
+  - name: create service unit 
+    template:
+      src: openvpn.service
+      dest: /etc/systemd/system/openvpn@.service
+      owner: root
+      group: root
+      mode: 0640
+
+  # Перезагрузка правил файрволла
+  - name: Reload firewall
+    ansible.builtin.shell: firewall-cmd --reload
+
+  # Перезапускам и добавляем в автозагрузку
+  - name: restart openvpn@server1
+    service:
+      name: openvpn@server1
+      state: restarted
+      enabled: true
+      daemon_reload: yes
+
+  # Перезагрузка правил файрволла
+  - name: Reload firewall
+    ansible.builtin.shell: firewall-cmd --reload
+...

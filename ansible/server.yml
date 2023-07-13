@@ -1,0 +1,11 @@
+---
+- name: Configure OpenVPN server
+  hosts: server
+  gather_facts: no
+  become: true
+  roles:
+    - openvpn-server-tap
+    - openvpn-server-tun
+    - openvpn-server-ras
+    - ocserv-server
+...

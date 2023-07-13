@@ -1,0 +1,174 @@
+---
+  # Отключаем SElinux
+  - name: Put SELinux in permissive mode, logging actions that would be blocked.
+    ansible.posix.selinux:
+      policy: targeted
+      state: permissive
+
+  # Запускам и добавляем firewall
+  - name: start firewalld
+    service:
+      name: firewalld
+      state: started
+      enabled: true
+
+ # Добавляем интерфейсы в зону
+  - name: add eth0 to public
+    ansible.posix.firewalld:
+      zone: public
+      interface: eth0
+      permanent: true
+      state: enabled
+
+ # Добавляем интерфейсы в зону
+  - name: add tun1 to public
+    ansible.posix.firewalld:
+      zone: public
+      interface: tun1
+      permanent: true
+      state: enabled
+    tags:
+      - firewall_conf
+
+ # Добавляем интерфейсы в зону
+  - name: add eth1 to public
+    ansible.posix.firewalld:
+      zone: public
+      interface: eth1
+      permanent: true
+      state: enabled
+
+  # Добавляем порт
+  - ansible.posix.firewalld:
+      port: 1207/udp
+      permanent: true
+      state: enabled
+
+  # Устанавливаем EPEL
+  - name: Install EPEL
+    yum:
+      name:
+      - epel-release
+      state: present
+      update_cache: true
+  
+  # Обновляем пакеты и устанавливаем пакеты
+  - name: install packages
+    yum:
+      name: 
+        - openvpn
+        - iperf3
+        - easy-rsa
+        - expect
+      state: present
+
+  # Создаем RAS сертификаты
+  - name: Create RAS KEYS
+    ansible.builtin.shell: |
+      set timeout 300
+      cd /etc/openvpn/
+      spawn rm -rf /etc/openvpn/pki
+      spawn /usr/share/easy-rsa/3.0.8/easyrsa init-pki
+      expect "/root/test/pki\n"
+      spawn /usr/share/easy-rsa/3.0.8/easyrsa build-ca nopass
+      expect "Enter PEM pass phrase:"
+      send "rasvpn\n"
+      expect "Verifying - Enter PEM pass phrase:"
+      send "rasvpn\n"
+      expect "\[Easy-RSA CA\]:"
+      send "\n"
+      expect "/pki\n"
+      spawn /usr/share/easy-rsa/3.0.8/easyrsa gen-req server nopass
+      expect ":"
+      send "\n"
+      expect "server.key\n"
+      spawn /usr/share/easy-rsa/3.0.8/easyrsa sign-req server server
+      expect "Confirm request details: "
+      send "yes\n"
+      expect ":"
+      send "rasvpn\n"
+      expect "server.crt\n"
+      set timeout 3000
+      spawn /usr/share/easy-rsa/3/easyrsa gen-req client nopass
+      expect ":"
+      send "\n"
+      expect "client.key\n"
+      spawn /usr/share/easy-rsa/3/easyrsa sign-req client client
+      expect "Confirm request details: "
+      send "yes\n"
+      expect ":"
+      send "rasvpn\n"
+      expect "client.crt\n"
+      spawn openvpn --genkey secret ca.key
+      spawn /usr/share/easy-rsa/3.0.8/easyrsa gen-dh
+      expect "dh.pem\n"
+      exit 0
+    args:
+      executable: /usr/bin/expect
+
+  # Копируем сертификаты
+  - name: Fetch the ca.crt
+    run_once: yes
+    fetch: src=/etc/openvpn/pki/ca.crt dest=/tmp/ flat=yes
+    tags:
+      - fetch_certs
+
+  # Копируем сертификаты
+  - name: Fetch the client.crt
+    run_once: yes
+    fetch: src=/etc/openvpn/pki/issued/client.crt dest=/tmp/ flat=yes
+    tags:
+      - fetch_certs
+
+  # Копируем сертификаты
+  - name: Fetch the client.key
+    run_once: yes
+    fetch: src=/etc/openvpn/pki/private/client.key dest=/tmp/ flat=yes
+    tags:
+      - fetch_certs
+
+  # Включаем маршрутизацию транзитных пакетов
+  - name: set up forward packages
+    sysctl:
+      name: net.ipv4.conf.all.forwarding
+      value: '1'
+      state: present
+
+  # Копируем файл server1.conf на openvpn-server, указываем владельца и права
+  - name: base set up TAP OpenVPN server 
+    template:
+      src: server3.conf
+      dest: /etc/openvpn/server3.conf
+      owner: root
+      group: root
+      mode: 0640
+
+  # Добавление роута
+  - name: Route adding
+    ansible.builtin.shell: echo 'iroute 10.10.10.0 255.255.255.0' > /etc/openvpn/client/client
+
+  # Создадим service unit для запуска openvpn
+  - name: create service unit 
+    template:
+      src: openvpn.service
+      dest: /etc/systemd/system/openvpn@.service
+      owner: root
+      group: root
+      mode: 0640
+
+  # Перезагрузка правил файрволла
+  - name: Reload firewall
+    ansible.builtin.shell: firewall-cmd --reload
+
+  # Перезапускам и добавляем в автозагрузку
+  - name: restart openvpn@server3
+    service:
+      name: openvpn@server3
+      state: restarted
+      enabled: true
+      daemon_reload: yes
+
+  # Перезагрузка правил файрволла
+  - name: Reload firewall
+    ansible.builtin.shell: firewall-cmd --reload
+...

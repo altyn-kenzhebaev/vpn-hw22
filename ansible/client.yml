@@ -1,0 +1,11 @@
+---
+- name: Configure OpenVPN client
+  hosts: client
+  gather_facts: no
+  become: true
+  roles:
+    - openvpn-client-tap
+    - openvpn-client-tun
+    - openvpn-client-ras
+    - openconnect-client
+...

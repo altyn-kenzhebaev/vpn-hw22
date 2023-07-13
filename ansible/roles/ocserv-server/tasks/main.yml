@@ -1,0 +1,144 @@
+---
+  # Отключаем SElinux
+  - name: Put SELinux in permissive mode, logging actions that would be blocked.
+    ansible.posix.selinux:
+      policy: targeted
+      state: permissive
+
+  # Копируем файл server1.conf на openvpn-server, указываем владельца и права
+  - name: base set up rules for firewalld
+    template:
+      src: direct.xml
+      dest: /etc/firewalld/direct.xml
+      owner: root
+      group: root
+      mode: 0640
+    tags:
+      - firewall_conf
+
+  # Запускам и добавляем firewall
+  - name: start firewalld
+    service:
+      name: firewalld
+      state: started
+      enabled: true
+    tags:
+      - firewall_conf
+
+ # Добавляем интерфейсы в зону
+  - name: add eth0 to public
+    ansible.posix.firewalld:
+      zone: public
+      interface: eth0
+      permanent: true
+      state: enabled
+    tags:
+      - firewall_conf
+
+ # Добавляем интерфейсы в зону
+  - name: add eth1 to public
+    ansible.posix.firewalld:
+      zone: public
+      interface: eth1
+      permanent: true
+      state: enabled
+    tags:
+      - firewall_conf
+
+ # Добавляем интерфейсы в зону
+  - name: add vpns1 to public
+    ansible.posix.firewalld:
+      zone: public
+      interface: vpns1
+      permanent: true
+      state: enabled
+    tags:
+      - firewall_conf
+
+  - name: enable masquerade
+    ansible.posix.firewalld:
+      masquerade: true
+      state: enabled
+      permanent: true
+      zone: public
+    tags:
+      - firewall_conf
+
+  # Добавляем порт
+  - ansible.posix.firewalld:
+      port: 443/tcp
+      permanent: true
+      state: enabled
+
+  # Устанавливаем EPEL
+  - name: Install EPEL
+    yum:
+      name:
+      - epel-release
+      state: present
+      update_cache: true
+  
+  # Обновляем пакеты и устанавливаем пакеты
+  - name: install packages
+    yum:
+      name: 
+        - ocserv
+        - python3-cryptography
+      state: present
+    tags:
+      - cert_create
+
+  # Включаем маршрутизацию транзитных пакетов
+  - name: set up forward packages
+    sysctl:
+      name: net.ipv4.conf.all.forwarding
+      value: '1'
+      state: present
+
+  - name: Ensure private key is present
+    community.crypto.openssl_privatekey:
+      path: /etc/pki/ocserv/private/server-key.pem
+      size: 2048
+      mode: 0600
+      type: RSA
+    tags:
+      - cert_create
+
+  - name: Ensure self-signed cert is present
+    community.crypto.x509_certificate:
+      path: /etc/pki/ocserv/public/server-cert.pem
+      privatekey_path: /etc/pki/ocserv/private/server-key.pem
+      provider: selfsigned
+      selfsigned_not_after: "+3650d" # this is the default
+      mode: 0644
+    tags:
+      - cert_create
+
+  # Копируем файл server1.conf на openvpn-server, указываем владельца и права
+  - name: base set up OCServ
+    template:
+      src: ocserv.conf
+      dest: /etc/ocserv/ocserv.conf
+      owner: root
+      group: root
+      mode: 0640
+
+  - name: Create openconnect user
+    ansible.builtin.shell: echo "vagrant" | ocpasswd altyn -c /etc/ocserv/ocpasswd
+
+  # Перезагрузка правил файрволла
+  - name: Reload firewall
+    ansible.builtin.shell: firewall-cmd --reload
+
+  # Перезапускам и добавляем в автозагрузку
+  - name: restart ocserv
+    service:
+      name: ocserv
+      state: restarted
+      enabled: true
+      daemon_reload: yes
+
+  # Перезагрузка правил файрволла
+  - name: Reload firewall
+    ansible.builtin.shell: firewall-cmd --reload
+...

@@ -1,0 +1,35 @@
+---
+  # Отключаем SElinux
+  - name: Put SELinux in permissive mode, logging actions that would be blocked.
+    ansible.posix.selinux:
+      policy: targeted
+      state: permissive
+
+  # Устанавливаем EPEL
+  - name: Install EPEL
+    yum:
+      name:
+      - epel-release
+      state: present
+      update_cache: true
+  
+  # Обновляем пакеты и устанавливаем пакеты
+  - name: install packages
+    yum:
+      name: 
+        - openconnect
+      state: present
+
+  - name: openconnect connection
+    ansible.builtin.shell: echo -e "yes\nvagrant\n" | openconnect -b -u altyn 192.168.50.10 >/dev/null 2>&1 &
+    async: 10
+    poll: 0    
+
+  # Проверка доступности
+  - name: Test reachability to 8.8.8.8 using openconnect
+    shell: ping -c 4 8.8.8.8
+
+  # Останавливаем для проверки других vpn-туннелей
+  - name: close openconnect connection
+    ansible.builtin.shell: killall -SIGINT openconnect
+...
